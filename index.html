@@ -445,9 +445,56 @@
         </div>
       </div>
 
+      <div class="border-t border-dark-border pt-4 mt-1">
+        <div class="flex items-center justify-between gap-3">
+          <div>
+            <div class="text-xs font-bold text-red-400">Delete Business / Stall</div>
+            <div class="text-[10px] text-slate-500 mt-0.5">Permanently removes this business and all its data from this browser.</div>
+          </div>
+          <button
+            type="button"
+            onclick="openDeleteStallConfirmation()"
+            class="shrink-0 px-3 py-2 rounded-xl text-xs font-extrabold text-red-400 border border-red-500/40 bg-red-500/10 hover:bg-red-500/20 transition-colors"
+          >
+            Delete
+          </button>
+        </div>
+      </div>
+
       <div class="flex justify-end gap-2 mt-2">
         <button onclick="closeSettingsModal()" class="px-4 py-2 rounded-xl text-xs text-slate-400">Cancel</button>
-        <button onclick="saveSettings()" class="bg-amber-500 hover:bg-amber-600 text-black font-extrabold px-5 py-2 rounded-xl text-xs">Save Changes</button>
+        <button id="save-settings-button" onclick="saveSettings()" disabled class="bg-slate-700 text-slate-500 font-extrabold px-5 py-2 rounded-xl text-xs cursor-not-allowed transition-colors">Save Changes</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL: DELETE BUSINESS CONFIRMATION ==================== -->
+  <div id="delete-stall-confirm-modal" class="fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-dark-card border border-red-500/30 rounded-2xl w-full max-w-sm p-5 flex flex-col gap-4 shadow-2xl">
+      <div class="flex items-start gap-3">
+        <div class="w-10 h-10 rounded-xl bg-red-500/10 border border-red-500/30 flex items-center justify-center shrink-0">
+          <i data-lucide="trash-2" class="w-5 h-5 text-red-400"></i>
+        </div>
+        <div>
+          <h3 class="text-base font-bold text-white">Delete Business?</h3>
+          <p class="text-xs text-slate-400 mt-1">
+            This will permanently delete <span id="delete-stall-name" class="font-bold text-white"></span>
+            and all of its menu, tabs, sales, and settings from this browser.
+          </p>
+        </div>
+      </div>
+
+      <div class="bg-red-500/5 border border-red-500/20 rounded-xl p-3 text-[11px] text-red-300">
+        This action cannot be undone.
+      </div>
+
+      <div class="flex justify-end gap-2">
+        <button type="button" onclick="closeDeleteStallConfirmation()" class="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-white">
+          Cancel
+        </button>
+        <button type="button" onclick="confirmDeleteStall()" class="bg-red-500 hover:bg-red-600 text-white font-extrabold px-4 py-2 rounded-xl text-xs">
+          Delete Business
+        </button>
       </div>
     </div>
   </div>
@@ -967,28 +1014,136 @@
     }
 
     // --- Settings Modal ---
+    let settingsOriginalValues = null;
+
     function openSettingsModal() {
       const stall = currentStall();
       if (!stall) return;
+
       document.getElementById('setting-stall-name').value = stall.name;
       document.getElementById('setting-upi-id').value = stall.upiId;
       document.getElementById('setting-payee-name').value = stall.payeeName;
+
+      settingsOriginalValues = {
+        name: stall.name,
+        upiId: stall.upiId,
+        payeeName: stall.payeeName
+      };
+
+      updateSettingsSaveButton();
       document.getElementById('settings-modal').classList.remove('hidden');
     }
 
     function closeSettingsModal() {
       document.getElementById('settings-modal').classList.add('hidden');
+      settingsOriginalValues = null;
+    }
+
+    function updateSettingsSaveButton() {
+      const button = document.getElementById('save-settings-button');
+      if (!button || !settingsOriginalValues) return;
+
+      const currentValues = {
+        name: document.getElementById('setting-stall-name').value,
+        upiId: document.getElementById('setting-upi-id').value,
+        payeeName: document.getElementById('setting-payee-name').value
+      };
+
+      const changed =
+        currentValues.name !== settingsOriginalValues.name ||
+        currentValues.upiId !== settingsOriginalValues.upiId ||
+        currentValues.payeeName !== settingsOriginalValues.payeeName;
+
+      button.disabled = !changed;
+      button.className = changed
+        ? 'bg-amber-500 hover:bg-amber-600 text-black font-extrabold px-5 py-2 rounded-xl text-xs cursor-pointer transition-colors'
+        : 'bg-slate-700 text-slate-500 font-extrabold px-5 py-2 rounded-xl text-xs cursor-not-allowed transition-colors';
     }
 
     function saveSettings() {
       const stall = currentStall();
-      if (!stall) return;
+      if (!stall || !settingsOriginalValues) return;
 
-      stall.name = document.getElementById('setting-stall-name').value.trim() || stall.name;
-      stall.upiId = document.getElementById('setting-upi-id').value.trim() || 'merchant@upi';
-      stall.payeeName = document.getElementById('setting-payee-name').value.trim() || stall.name;
+      const nameInput = document.getElementById('setting-stall-name');
+      const upiInput = document.getElementById('setting-upi-id');
+      const payeeInput = document.getElementById('setting-payee-name');
+
+      const name = nameInput.value.trim();
+      const upiId = upiInput.value.trim();
+      const payeeName = payeeInput.value.trim();
+
+      const changed =
+        name !== settingsOriginalValues.name ||
+        upiId !== settingsOriginalValues.upiId ||
+        payeeName !== settingsOriginalValues.payeeName;
+
+      if (!changed) return;
+
+      stall.name = name || stall.name;
+      stall.upiId = upiId || 'merchant@upi';
+      stall.payeeName = payeeName || stall.name;
+
       saveState();
       closeSettingsModal();
+    }
+
+    function attachSettingsChangeListeners() {
+      ['setting-stall-name', 'setting-upi-id', 'setting-payee-name'].forEach(id => {
+        const input = document.getElementById(id);
+        if (input) input.addEventListener('input', updateSettingsSaveButton);
+      });
+    }
+
+    function openDeleteStallConfirmation() {
+      const stall = currentStall();
+      if (!stall) return;
+
+      document.getElementById('delete-stall-name').textContent = stall.name;
+      document.getElementById('delete-stall-confirm-modal').classList.remove('hidden');
+      lucide.createIcons();
+    }
+
+    function closeDeleteStallConfirmation() {
+      document.getElementById('delete-stall-confirm-modal').classList.add('hidden');
+    }
+
+    function confirmDeleteStall() {
+      const stall = currentStall();
+      if (!stall) return;
+
+      const deletedStallId = stall.id;
+      delete appState.stalls[deletedStallId];
+
+      let remainingStallIds = Object.keys(appState.stalls);
+
+      // Keep the POS usable even if the user deletes their last business.
+      // The deleted business data is gone; a fresh empty profile is created.
+      if (remainingStallIds.length === 0) {
+        const newId = 'stall_' + Date.now();
+        appState.stalls[newId] = {
+          id: newId,
+          name: 'New Business',
+          upiId: 'merchant@upi',
+          payeeName: 'New Business',
+          menu: [],
+          tabs: [],
+          settledOrders: [],
+          seqCounter: 1
+        };
+        remainingStallIds = [newId];
+      }
+
+      appState.activeStallId = remainingStallIds[0];
+
+      saveState();
+      closeDeleteStallConfirmation();
+      closeSettingsModal();
+
+      renderStallList();
+      updateUI();
+      renderDashboard();
+      renderSalesRegister();
+      renderMenuDrawer();
     }
 
     function openMenuDrawer() {
@@ -1211,6 +1366,8 @@
     }
 
     window.addEventListener('DOMContentLoaded', loadState);
-  </script>
+      attachSettingsChangeListeners();
+
+</script>
 </body>
 </html>
